@@ -1,0 +1,471 @@
+---
+title: "`r params$report_title`"
+author: "`r params$report_author`"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    self_contained: true
+params:
+  # Path to the freshly dropped CSV to inspect. This is the ONE knob a user sets.
+  data_path: !r here::here("1_data", "master_micro_survey.csv")
+
+  # --- Report Text (editable; leave "" to use the smart default) ---
+  report_title: "Pre-flight Data Quality Report"
+  report_author: "CERP Analytics"
+  source_note: "Generated via CERP Analytics — pre-flight QA (0.00)"
+---
+
+<!--
+================================================================================
+ 0.00 — PRE-FLIGHT DATA QUALITY REPORT + TEMPLATE RECOMMENDER
+--------------------------------------------------------------------------------
+ A "zero template" you render against ANY freshly dropped CSV *before* picking a
+ visual. It profiles the columns, flags the usual field-data landmines, and
+ recommends which production templates (3.01–3.18) the data can actually feed —
+ including which column maps to which *_var param.
+
+ This template is PER-DATASET, not per-config: it is deliberately NOT wired into
+ the master knit (2.2). Render it on its own, from the project root in RStudio:
+
+     rmarkdown::render(
+       here::here("3_templates", "0.00_data_quality_report.Rmd"),
+       params     = list(data_path = here::here("1_data", "master_micro_survey.csv")),
+       output_dir = here::here("4_output")
+     )
+
+ Point `data_path` at any CSV in 1_data/. Field data (anything other than
+ master_*.csv) stays local — 4_output/ and 3_templates/*.html are gitignored, so
+ a babychecker QA report never reaches git, and nothing here calls any API.
+================================================================================
+-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,          # QA report: show findings, not code
+  warning = FALSE,
+  message = FALSE,
+  dev.args = list(bg = "#FAF9F6"),
+  fig.width = 9,
+  fig.height = 4,
+  fig.retina = 3
+)
+```
+
+```{r load-theme-and-profile}
+library(tidyverse)
+
+source(here::here("2_R", "2.0_setup_theme.R"), local = TRUE)  # palette + theme_cerp()
+source(here::here("2_R", "2.5_helpers.R"), local = TRUE)       # cerp_profile(), etc.
+
+# DELIBERATE EXCEPTION to the "always cerp_load()" convention: this report exists
+# to surface the very problems cerp_load() silently scrubs (header/value
+# whitespace), so it must see the RAW file. cerp_profile() only describes — it
+# never mutates — so reading raw here is safe.
+if (!file.exists(params$data_path)) {
+  stop("Data file not found: ", params$data_path,
+       "\nCheck the 'data_path' parameter.", call. = FALSE)
+}
+raw  <- readr::read_csv(params$data_path, show_col_types = FALSE, trim_ws = FALSE)
+prof <- cerp_profile(raw)
+cols <- prof$columns
+ds   <- prof$dataset
+```
+
+```{r callout-style, results='asis'}
+# House-style callout boxes. Colors are pulled from the live palette (cerp_cols,
+# sourced above) so they track theme_colors.yml rather than re-hardcoding hexes.
+cat(sprintf('
+<style>
+  .cerp-callout { padding: 0.7rem 1.05rem; margin: 0.55rem 0; border-radius: 6px;
+                  border-left: 4px solid %1$s; background: %2$s; color: %3$s;
+                  font-family: "Libre Franklin", sans-serif; font-size: 0.94rem; }
+  .cerp-callout.warn { border-left-color: %4$s; background: #fbf3e3; }
+  .cerp-callout.flag { border-left-color: %5$s; background: #fbeae4; }
+  .cerp-callout.ok   { border-left-color: %6$s; background: #eaf3ef; }
+  .cerp-callout .lbl { font-weight: 600; }
+</style>',
+  cerp_cols[["primary"]], cerp_cols[["box"]], cerp_cols[["text"]],
+  cerp_cols[["sand"]], cerp_cols[["accent"]], cerp_cols[["sage"]]))
+```
+
+This is a **pre-flight check** of `` `r basename(params$data_path)` `` — run *before*
+choosing a visualization. It describes each column, flags the common field-data
+problems, and recommends which CERP templates the data can feed. It changes
+nothing: fix anything below in the source data, then re-run.
+
+## Dimensions & duplicates
+
+```{r dimensions, results='asis'}
+cat(sprintf(
+  "The dataset has **%s rows** and **%s columns**.\n\n",
+  format(ds$n_rows, big.mark = ","), ds$n_cols))
+
+# Dataset-level flags as house-style callouts (only shown when they fire).
+if (ds$single_row) {
+  cat('<div class="cerp-callout flag"><span class="lbl">Single row.</span> ',
+      'One data row is not enough for most charts — expect distributions, ',
+      'trends, and group comparisons to be meaningless.</div>\n', sep = "")
+}
+if (ds$duplicate_rows > 0) {
+  cat(sprintf('<div class="cerp-callout warn"><span class="lbl">%s duplicate row(s).</span> ',
+              ds$duplicate_rows),
+      'Fully identical rows can double-count in aggregates — confirm they are real ',
+      'repeated observations, not an export/merge artifact.</div>\n', sep = "")
+}
+if (length(ds$empty_columns) > 0) {
+  cat(sprintf('<div class="cerp-callout warn"><span class="lbl">Empty column(s):</span> %s. ',
+              paste(ds$empty_columns, collapse = ", ")),
+      'These carry no values and are ignored by the recommender.</div>\n', sep = "")
+}
+if (length(ds$header_whitespace) > 0) {
+  cat(sprintf('<div class="cerp-callout warn"><span class="lbl">Header whitespace:</span> %s. ',
+              paste(sprintf("'%s'", ds$header_whitespace), collapse = ", ")),
+      'cerp_load() squishes these automatically at render time, but tidy the source ',
+      'header to be safe.</div>\n', sep = "")
+}
+if (!ds$single_row && ds$duplicate_rows == 0 &&
+    length(ds$empty_columns) == 0 && length(ds$header_whitespace) == 0) {
+  cat('<div class="cerp-callout ok"><span class="lbl">No structural issues.</span> ',
+      'No duplicate rows, empty columns, or header whitespace.</div>\n', sep = "")
+}
+```
+
+## Column profile
+
+```{r profile-table}
+profile_display <- cols %>%
+  transmute(
+    Column        = column,
+    Type          = type,
+    `Missing %`   = missing_pct,
+    `Distinct`    = n_distinct,
+    `Whitespace`  = whitespace_issues,
+    `Date-parse`  = ifelse(is.na(date_parse_rate), "—",
+                           scales::percent(date_parse_rate, accuracy = 1)),
+    `Outliers`    = ifelse(is.na(outlier_count), "—", as.character(outlier_count))
+  )
+
+knitr::kable(profile_display, align = "llrrrrr")
+```
+
+*Type is a deterministic best guess (numeric / categorical / date / id-like /
+text / empty). "Whitespace" counts values with stray leading/trailing/internal
+spaces; "Date-parse" is the share of non-missing values `cerp_parse_date()` can
+read (shown for text/date columns); "Outliers" counts points beyond 1.5×IQR.*
+
+## Missingness
+
+```{r missingness-chart}
+miss_df <- cols %>% filter(missing_pct > 0) %>% arrange(missing_pct)
+
+if (nrow(miss_df) == 0) {
+  cat("No missing values in any column.")
+} else {
+  # Inline house-style bar chart (reuses theme_cerp() + palette — the sensible
+  # reuse here; there is no template viz_*() for a QA missingness bar).
+  miss_df <- miss_df %>% mutate(column = factor(column, levels = column))
+  ggplot(miss_df, aes(x = missing_pct, y = column)) +
+    geom_col(fill = cerp_cols[["primary"]], width = 0.72) +
+    geom_text(aes(label = paste0(missing_pct, "%")),
+              hjust = -0.15, family = cerp_font_caption,
+              size = 3.2, color = cerp_cols[["subtle"]]) +
+    scale_x_continuous(limits = c(0, max(miss_df$missing_pct) * 1.12),
+                       expand = expansion(mult = c(0, 0))) +
+    labs(title = "Missing values by column",
+         subtitle = "Percent of rows with no usable value",
+         x = NULL, y = NULL,
+         caption = params$source_note) +
+    theme_cerp() +
+    theme(panel.grid.major.y = element_blank())
+}
+```
+
+## Per-column issue callouts
+
+```{r column-callouts, results='asis'}
+any_issue <- FALSE
+
+for (i in seq_len(nrow(cols))) {
+  r <- cols[i, ]
+  notes <- character(0)
+
+  if (isTRUE(r$type == "empty")) {
+    notes <- c(notes, "column is entirely empty (no usable values)")
+  }
+  if (!is.na(r$missing_pct) && r$missing_pct >= 20) {
+    notes <- c(notes, sprintf("%.1f%% missing — thin coverage for this field",
+                              r$missing_pct))
+  }
+  if (isTRUE(r$whitespace_issues > 0)) {
+    notes <- c(notes, sprintf("%d value(s) have stray whitespace (cerp_load scrubs this at render)",
+                              r$whitespace_issues))
+  }
+  if (!is.na(r$date_parse_rate) && r$date_parse_rate > 0 && r$date_parse_rate < 0.9) {
+    notes <- c(notes, sprintf("only %s of values parse as dates — mixed/ambiguous date formats",
+                              scales::percent(r$date_parse_rate, accuracy = 1)))
+  }
+  if (!is.na(r$outlier_count) && r$outlier_count > 0) {
+    notes <- c(notes, sprintf("%d value(s) beyond 1.5×IQR — inspect for entry errors or true extremes",
+                              r$outlier_count))
+  }
+
+  if (length(notes) > 0) {
+    any_issue <- TRUE
+    cls <- if (isTRUE(r$type == "empty") ||
+               (!is.na(r$missing_pct) && r$missing_pct >= 50)) "flag" else "warn"
+    cat(sprintf('<div class="cerp-callout %s"><span class="lbl">%s</span> (%s): %s.</div>\n',
+                cls, r$column, r$type, paste(notes, collapse = "; ")))
+  }
+}
+
+if (!any_issue) {
+  cat('<div class="cerp-callout ok"><span class="lbl">No column-level issues.</span> ',
+      'No high missingness, whitespace, date-parse, or outlier flags.</div>\n', sep = "")
+}
+```
+
+## Recommended visuals
+
+```{r recommender}
+# =============================================================================
+# DETERMINISTIC TEMPLATE RECOMMENDER
+# -----------------------------------------------------------------------------
+# A fixed rule table mapping the column-type profile (+ light name hints) to the
+# production templates that data can feed. Each rule that matches emits one row:
+# the template id, why it fits, the suggested column -> *_var mapping, and a
+# score used only for ranking (higher = more specific / stronger match). No
+# randomness, no model — same input always yields the same recommendations.
+# Suggestions only: the user confirms the column mapping in the template YAML.
+# =============================================================================
+
+# --- Role extraction from the profile ----------------------------------------
+nd        <- setNames(cols$n_distinct, cols$column)
+by_type   <- function(t) cols$column[cols$type == t]
+num_cols  <- by_type("numeric")
+cat_cols  <- by_type("categorical")
+date_cols <- by_type("date")
+id_cols   <- by_type("id-like")
+
+nm_match  <- function(pool, rx) pool[grepl(rx, pool, ignore.case = TRUE)]
+first     <- function(v) if (length(v)) v[[1]] else NA_character_
+
+# Likert-pattern detector: cleaned levels overlap a rating lexicon, 3–7 levels.
+likert_lex <- c("strongly disagree","disagree","somewhat disagree","neutral",
+                "neither agree nor disagree","somewhat agree","agree","strongly agree",
+                "strongly dissatisfied","dissatisfied","satisfied","very satisfied",
+                "strongly satisfied","never","rarely","sometimes","often","always",
+                "poor","fair","good","very good","excellent")
+is_likert <- function(colname) {
+  v <- unique(tolower(stringr::str_squish(as.character(raw[[colname]]))))
+  v <- v[nzchar(v) & !is.na(v)]
+  if (length(v) < 3 || length(v) > 7) return(FALSE)
+  mean(v %in% likert_lex) >= 0.6
+}
+
+# Named-role sub-pools (deterministic; name hints only sharpen, never fabricate).
+year_num   <- nm_match(num_cols, "year|yr|wave|round|period")
+time_cols  <- union(date_cols, year_num)
+target_num <- nm_match(num_cols, "target|goal|benchmark")
+event_num  <- nm_match(num_cols, "event.?time|rel.?time|time.?to|relative")
+stage_cats <- nm_match(cat_cols, "stage|step|phase|pipeline")
+district   <- nm_match(c(cat_cols, id_cols, by_type("text")),
+                       "district|region|province|tehsil|division|zone")
+# A treatment flag is any 2-level column — categorical ("Treatment"/"Control")
+# OR numeric (0/1). Name hints (treat/arm/…) sharpen the pick when present.
+binary_cols <- cols$column[cols$n_distinct == 2 &
+                           cols$type %in% c("categorical", "numeric")]
+treat_cats <- {
+  hinted <- nm_match(binary_cols, "treat|arm|group|condition|intervention|treated")
+  if (length(hinted)) hinted else binary_cols
+}
+likert_cats <- cat_cols[vapply(cat_cols, is_likert, logical(1))]
+entity_cats <- nm_match(c(cat_cols, id_cols),
+                        "district|school|clinic|facility|entity|unit|region|name")
+# "Plain" measures: numeric that isn't a target/event-time/year role.
+measure_num <- setdiff(num_cols, c(target_num, event_num, year_num))
+outcome_pref <- function() {
+  hinted <- nm_match(measure_num, "score|outcome|rate|result|amount|index|value")
+  first(if (length(hinted)) hinted else measure_num)
+}
+
+# --- Rule accumulator ---------------------------------------------------------
+recs <- list()
+add  <- function(id, name, why, mapping, score) {
+  recs[[length(recs) + 1]] <<- data.frame(
+    id = id, template = name, why = why,
+    mapping = paste(sprintf("%s = %s", names(mapping), unlist(mapping)),
+                    collapse = "; "),
+    score = score, stringsAsFactors = FALSE)
+}
+has <- function(x) length(x) > 0 && !all(is.na(x))
+
+# --- Rules (one per production template) --------------------------------------
+# 3.01 dumbbell — 2-level group + before/after numerics
+{
+  before <- first(nm_match(measure_num, "base|pre|before|initial"))
+  after  <- first(nm_match(measure_num, "end|post|after|final"))
+  if (has(treat_cats) && !is.na(before) && !is.na(after) && before != after) {
+    add("3.01", "Baseline vs endline (dumbbell)",
+        "A treatment/control group with matched before/after measures.",
+        list(group_var = first(treat_cats), before_var = before, after_var = after), 9)
+  }
+}
+# 3.02 distribution shifts — group + one numeric
+if (has(cat_cols) && has(measure_num)) {
+  add("3.02", "Distribution shifts (density)",
+      "A grouping column and a numeric outcome to compare distributions.",
+      list(group_var = first(cat_cols), outcome_var = outcome_pref()), 5)
+}
+# 3.03 treatment effects (forest) — treatment 2-level + numeric outcome
+if (has(treat_cats) && has(measure_num)) {
+  add("3.03", "Treatment effects (forest plot)",
+      "A treatment/control flag and a numeric outcome.",
+      list(group_var = first(treat_cats), outcome_var = outcome_pref()), 7)
+}
+# 3.04 subgroup impacts — treatment + a second categorical + numeric
+{
+  sub <- first(setdiff(cat_cols, first(treat_cats)))
+  if (has(treat_cats) && !is.na(sub) && has(measure_num)) {
+    add("3.04", "Subgroup impacts (coefficient plot)",
+        "A treatment flag, a subgroup dimension, and a numeric outcome.",
+        list(group_var = first(treat_cats), subgroup_var = sub,
+             outcome_var = outcome_pref()), 6)
+  }
+}
+# 3.05 waffle — a single categorical (parts of a whole)
+if (has(cat_cols)) {
+  add("3.05", "Waffle chart (share of whole)",
+      "A categorical status column shown as proportions.",
+      list(status_var = first(cat_cols)), 3)
+}
+# 3.06 slopegraph — entity + time (>=2 points) + numeric
+if (has(entity_cats) && has(time_cols) && has(measure_num)) {
+  add("3.06", "Slopegraph (two-point change)",
+      "An entity, a time column, and a value — change between two periods.",
+      list(entity_var = first(entity_cats), time_var = first(time_cols),
+           value_var = outcome_pref()), 5)
+}
+# 3.07 diverging bar — entity + Likert response
+if (has(likert_cats)) {
+  add("3.07", "Diverging bar (Likert sentiment)",
+      "A Likert-scale response column, ideal for a diverging bar.",
+      list(entity_var = if (has(entity_cats)) first(entity_cats) else first(cat_cols),
+           response_var = first(likert_cats)), 8)
+}
+# 3.08 icon array — a single categorical proportion
+if (has(cat_cols)) {
+  add("3.08", "Icon array (frequency)",
+      "A categorical column shown as an intuitive icon frequency.",
+      list(category_var = first(cat_cols)), 3)
+}
+# 3.09 waterfall — stage-like categorical + numeric
+if (has(stage_cats) && has(measure_num)) {
+  add("3.09", "Waterfall (running total by stage)",
+      "A stage/step column with one numeric amount per stage.",
+      list(category_var = first(stage_cats), value_var = outcome_pref()), 7)
+}
+# 3.10 bump — entity + time (>=3 points) + numeric
+{
+  t <- first(time_cols)
+  if (has(entity_cats) && !is.na(t) && nd[t] >= 3 && has(measure_num)) {
+    add("3.10", "Bump chart (ranking over time)",
+        "An entity tracked across 3+ time points on a numeric metric.",
+        list(entity_var = first(entity_cats), time_var = t,
+             value_var = outcome_pref()), 6)
+  }
+}
+# 3.11 bullet — entity + value + target numeric
+if (has(entity_cats) && has(measure_num) && has(target_num)) {
+  add("3.11", "Bullet chart (value vs target)",
+      "An entity with a value and an explicit target/benchmark column.",
+      list(entity_var = first(entity_cats), value_var = outcome_pref(),
+           target_var = first(target_num)), 7)
+}
+# 3.12 deviation bar — entity/category + numeric
+if (has(entity_cats) && has(measure_num)) {
+  add("3.12", "Deviation bar (vs reference)",
+      "An entity/category with a numeric value to show deviation from a reference.",
+      list(entity_var = first(entity_cats), value_var = outcome_pref()), 4)
+}
+# 3.13 ridgeline — multi-level categorical + numeric distribution
+{
+  grp <- first(cat_cols[nd[cat_cols] >= 3])
+  if (!is.na(grp) && has(measure_num)) {
+    add("3.13", "Ridgeline (distributions by group)",
+        "A categorical with 3+ groups and a numeric distribution to compare.",
+        list(group_var = grp, value_var = outcome_pref()), 5)
+  }
+}
+# 3.14 calendar heatmap — a date column + numeric
+if (has(date_cols) && has(measure_num)) {
+  add("3.14", "Calendar heatmap (daily values)",
+      "A real date column with a numeric value — daily intensity over a calendar.",
+      list(date_var = first(date_cols), value_var = outcome_pref()), 7)
+}
+# 3.15 choropleth — district-like names + numeric
+if (has(district) && has(measure_num)) {
+  add("3.15", "Choropleth map (by district)",
+      "A district/region name column and a numeric metric to shade.",
+      list(region_var = first(district), value_var = outcome_pref()), 8)
+}
+# 3.16 event study — unit + time + event-time + treatment + numeric outcome (panel)
+if (has(id_cols) && has(time_cols) && has(event_num) &&
+    has(treat_cats) && has(measure_num)) {
+  add("3.16", "Event study (dynamic effects)",
+      "A panel with unit, calendar time, event-time, a treatment flag, and an outcome.",
+      list(unit_var = first(id_cols), time_var = first(time_cols),
+           event_time_var = first(event_num), treat_var = first(treat_cats),
+           outcome_var = outcome_pref()), 9)
+}
+# 3.17 small multiples — facet categorical + x + y
+{
+  facet <- first(cat_cols[nd[cat_cols] >= 3])
+  xv    <- first(time_cols)
+  if (!is.na(facet) && !is.na(xv) && has(measure_num)) {
+    add("3.17", "Small multiples (faceted trend)",
+        "A faceting category, an x (usually time), and a numeric y.",
+        list(facet_var = facet, x_var = xv, y_var = outcome_pref()), 5)
+  }
+}
+# 3.18 heatmap matrix — two categorical/time axes + numeric
+{
+  two_cats <- union(cat_cols, time_cols)  # rows x cols; a time column makes a good axis
+  if (length(unique(two_cats)) >= 2 && has(measure_num)) {
+    add("3.18", "Heatmap matrix (category × category)",
+        "Two categorical/time axes and a numeric cell value.",
+        list(row_var = two_cats[[1]], col_var = two_cats[[2]],
+             value_var = outcome_pref()), 4)
+  }
+}
+```
+
+```{r recommender-table, results='asis'}
+if (length(recs) == 0) {
+  cat('<div class="cerp-callout flag"><span class="lbl">No confident recommendation.</span> ',
+      'The column profile did not match any template rule cleanly — check the ',
+      'flags above (empty columns, all-text data, single row) and confirm the ',
+      'right file was profiled.</div>\n', sep = "")
+} else {
+  rec_df <- do.call(rbind, recs)
+  rec_df <- rec_df[order(-rec_df$score, rec_df$id), ]
+  rec_out <- data.frame(
+    Rank             = seq_len(nrow(rec_df)),
+    Template         = sprintf("%s — %s", rec_df$id, rec_df$template),
+    `Why it fits`    = rec_df$why,
+    `Suggested mapping` = rec_df$mapping,
+    check.names = FALSE, stringsAsFactors = FALSE)
+  cat(knitr::kable(rec_out, format = "html", align = "llll", row.names = FALSE))
+}
+```
+
+*Recommendations are deterministic suggestions from the column profile — always
+confirm the column → `*_var` mapping in the chosen template's YAML header before
+rendering. Absence of a template here means the required column roles were not
+detected, not that the chart is impossible.*
+
+<p style="font-family:'Libre Franklin',sans-serif; font-size:0.8rem; color:#8a9aa3; margin-top:2rem;">
+`r params$source_note`
+</p>

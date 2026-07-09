@@ -246,3 +246,139 @@ cerp_render_one <- function(input, output_dir, output_file = NULL,
     FALSE
   })
 }
+
+# ------------------------------------------------------------------------------
+# cerp_profile(): pre-flight data QA. The engine behind
+# 3_templates/0.00_data_quality_report.Rmd (and the deferred Shiny app). Given a
+# data.frame, return a two-part profile describing what the data looks like BEFORE
+# a user picks a visual. It only DESCRIBES — it never mutates or "fixes" anything;
+# deciding what to do about a flag is the report's (and the user's) job.
+#
+#   $columns  tibble, one tidy row per column:
+#               column, type, n_missing, missing_pct, n_distinct,
+#               whitespace_issues, date_parse_rate, outlier_count
+#             type is one of: numeric | categorical | date | id-like | text |
+#             empty. Detection is heuristic and deterministic (see detect_type).
+#   $dataset  list of dataset-level flags: n_rows, n_cols, duplicate_rows,
+#             empty_columns, single_row, header_whitespace.
+#
+# IMPORTANT: feed cerp_profile() the RAW file (readr::read_csv(path)) — NOT the
+# cerp_load() output. cerp_load() scrubs header/value whitespace on purpose, which
+# is exactly the class of problem this profiler exists to surface. This is the one
+# deliberate exception to the "always cerp_load()" convention, and it lives here so
+# the report can honor it in one clearly-labelled place.
+# ------------------------------------------------------------------------------
+cerp_profile <- function(data) {
+  stopifnot(is.data.frame(data))
+  nm <- names(data)
+  nr <- nrow(data)
+
+  # A cell is "blank" if it is NA or (for text) whitespace-only — both mean the
+  # value carries no information, so both count toward missingness.
+  is_blank <- function(x) {
+    if (is.character(x)) is.na(x) | !nzchar(stringr::str_squish(x)) else is.na(x)
+  }
+
+  # Column names that read like identifiers rather than measures/categories.
+  id_name_rx <- "(^|[ _])id([ _]|$)|_id$|^id$|uuid|serial|(^|[ _])code$"
+
+  # detect_type(): assign one label per column. Order matters — dates are checked
+  # before numeric because date strings ("2025-11-01") also satisfy parse_number()
+  # (it would grab the year), and id-like is checked before free text so all-unique
+  # key columns aren't mislabelled "text".
+  detect_type <- function(x, name) {
+    clean  <- if (is.character(x)) stringr::str_squish(x) else x
+    non_na <- clean[!is_blank(x)]
+    if (length(non_na) == 0) return("empty")
+    nd      <- length(unique(non_na))
+    id_hint <- grepl(id_name_rx, name, ignore.case = TRUE)
+
+    if (inherits(x, "Date") || inherits(x, "POSIXt")) return("date")
+
+    if (is.numeric(x)) {
+      is_int <- all(non_na == floor(non_na))
+      # id-like if an integer key named like an id (even when it repeats, e.g. a
+      # panel unit), or an all-distinct integer key. A 0/1 flag stays numeric.
+      if (is_int && nd > 1 && (id_hint || nd == length(non_na))) return("id-like")
+      return("numeric")
+    }
+
+    if (is.logical(x)) return("categorical")
+
+    chr <- as.character(non_na)
+    # date? (before numeric — see note above)
+    if (mean(!is.na(cerp_parse_date(chr, quiet = TRUE))) >= 0.8) return("date")
+    # explicit key name, or every value distinct across a non-trivial column
+    if (id_hint || (nd == length(non_na) && nd > 20)) return("id-like")
+    # numbers stored as text ("1,200", "45%")
+    if (mean(!is.na(suppressWarnings(cerp_numeric(chr, name)))) >= 0.8) return("numeric")
+    # small level count -> categorical; otherwise free text
+    if (nd <= 20 || nd <= 0.5 * length(non_na)) return("categorical")
+    "text"
+  }
+
+  # Per-column one-row profile, bound together below.
+  prof_one <- function(x, name) {
+    blank     <- is_blank(x)
+    n_missing <- sum(blank)
+    clean     <- if (is.character(x)) stringr::str_squish(x) else x
+    non_na    <- clean[!blank]
+    type      <- detect_type(x, name)
+
+    # cosmetic whitespace: raw value differs from its squished form
+    ws <- if (is.character(x)) sum(!is.na(x) & x != stringr::str_squish(x)) else 0L
+
+    # date-parse success, reported for anything date-ish or textual (NA otherwise)
+    dpr <- if (is.character(x) || is.factor(x) ||
+               inherits(x, "Date") || inherits(x, "POSIXt")) {
+      if (length(non_na) == 0) NA_real_
+      else round(mean(!is.na(cerp_parse_date(as.character(non_na), quiet = TRUE))), 3)
+    } else NA_real_
+
+    # 1.5xIQR outliers, only where a numeric reading is meaningful
+    n_out <- NA_integer_
+    if (type == "numeric") {
+      num <- suppressWarnings(cerp_numeric(x, name))
+      num <- num[!is.na(num)]
+      if (length(num) >= 4 && length(unique(num)) > 1) {
+        q   <- stats::quantile(num, c(0.25, 0.75), names = FALSE)
+        iqr <- q[2] - q[1]
+        n_out <- sum(num < q[1] - 1.5 * iqr | num > q[2] + 1.5 * iqr)
+      } else {
+        n_out <- 0L
+      }
+    }
+
+    data.frame(
+      column            = name,
+      type              = type,
+      n_missing         = n_missing,
+      missing_pct       = if (nr > 0) round(100 * n_missing / nr, 1) else NA_real_,
+      n_distinct        = length(unique(non_na)),
+      whitespace_issues = as.integer(ws),
+      date_parse_rate   = dpr,
+      outlier_count     = n_out,
+      stringsAsFactors  = FALSE
+    )
+  }
+
+  columns <- if (length(nm) > 0) {
+    dplyr::as_tibble(do.call(rbind, Map(prof_one, data, nm)))
+  } else {
+    dplyr::tibble(column = character(), type = character(),
+                  n_missing = integer(), missing_pct = double(),
+                  n_distinct = integer(), whitespace_issues = integer(),
+                  date_parse_rate = double(), outlier_count = integer())
+  }
+
+  dataset <- list(
+    n_rows            = nr,
+    n_cols            = length(nm),
+    duplicate_rows    = sum(duplicated(data)),
+    empty_columns     = columns$column[columns$type == "empty"],
+    single_row        = nr == 1,
+    header_whitespace = nm[nm != stringr::str_squish(nm)]
+  )
+
+  list(columns = columns, dataset = dataset)
+}

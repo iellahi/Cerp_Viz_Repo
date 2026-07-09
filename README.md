@@ -124,6 +124,28 @@ Column names in `*_var` params are validated against the actual data on load: a 
 produces a clear error naming the missing column and the closest match, not a
 silently-wrong chart.
 
+## Pre-flight Data Quality Report (`0.00`)
+
+Before picking a visual, profile a freshly dropped CSV with the pre-flight QA report.
+It is **per-dataset, not per-config** — deliberately *not* part of `2.2_master_knit.R` —
+so render it on its own from the R console (project root):
+
+```r
+rmarkdown::render(
+  here::here("3_templates", "0.00_data_quality_report.Rmd"),
+  params     = list(data_path = here::here("1_data", "master_micro_survey.csv")),
+  output_dir = here::here("4_output")
+)
+```
+
+Point `data_path` at any CSV in `1_data/`. The report shows dataset dimensions and
+duplicate/empty/single-row flags, a per-column profile (detected type, missingness,
+distinct count, stray whitespace, date-parse rate, 1.5×IQR outliers), a missingness
+chart, house-style per-column issue callouts, and a **deterministic template
+recommender** — a ranked list of which templates (3.01–3.18) the data can feed and which
+column maps to which `*_var` param. It only describes; it never changes your data. Field
+data stays local (`4_output/` and `3_templates/*.html` are gitignored; nothing calls an API).
+
 ## Template Dictionary
 
 Choose the right template for your policy narrative (set it as `template:` in the config):
