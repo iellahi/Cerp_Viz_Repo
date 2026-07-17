@@ -1,5 +1,6 @@
 # ==============================================================================
-# CERP Analytics: Master Render Script (Phase 3 — config-driven)
+# Script Name: 2.2_master_knit.R — CERP Analytics Master Render (config-driven)
+# Author:  Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose: Render the visuals declared in render_config.yml, then (optionally)
 #          stitch selected ones into a single combined HTML report.
 # Users edit render_config.yml — never this script.

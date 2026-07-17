@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.5_helpers.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     Shared data-loading, validation, and parsing utilities used by
 #              every template. Design principle: fail LOUDLY and clearly —
 #              a template must never render a silently-wrong chart.

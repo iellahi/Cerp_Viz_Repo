@@ -1,3 +1,11 @@
+# ==============================================================================
+# Script Name: master_data.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
+# Purpose:     Generate the synthetic master_*.csv demo datasets in 1_data/ —
+#              the only data tracked in git. Fully seeded (set.seed below +
+#              RNG-isolated dataset 6) so re-running reproduces the shipped
+#              CSVs byte-for-byte. No field data is read or written here.
+# ==============================================================================
 library(tidyverse)
 library(lubridate)
 library(here)
@@ -122,11 +130,12 @@ write_csv(district_indicators, here::here("1_data", "master_district_indicators.
 # If a REAL ADM2 boundary file is present (>40 districts), derive the demo
 # indicators straight from its district names so the choropleth join is
 # guaranteed clean (subset shaded, the rest render grey). Otherwise fall back to
-# the stylized-demo names that ship with the repo. This means re-running the
-# generator won't clobber a real-boundary swap with mismatched names.
-# NOTE: the shipped pk_districts_adm2.geojson is stylized demo geometry (real
-# district names at approximate centroids). To use real boundaries, drop a
-# geoBoundaries/GADM ADM2 file (name field -> `district`) at the same path.
+# hard-coded legacy demo names. This means re-running the generator won't
+# clobber a boundary swap with mismatched names.
+# NOTE: since Phase 5B (2026-07-17) the shipped pk_districts_adm2.geojson IS
+# real geometry — geoBoundaries gbOpen PAK ADM2, 126 districts, Public Domain;
+# provenance + transformation in 1_data/geo/SOURCES.md — so the real branch is
+# the live path and the fallback below is vestigial.
 # ==============================================================================
 adm2_path <- here::here("1_data", "geo", "pk_districts_adm2.geojson")
 real_names <- NULL

@@ -17,20 +17,18 @@
 /4_output/*
 !/4_output/.gitkeep
 
-# Exclude specific external folders and zips
-/ibraheem_viz_repo/
-ibraheem_viz_repo.zip
-
 # Standard R and System files to ignore
 .Rproj.user/
 .Rhistory
 .RData
 .DS_Store
 
-# Knitted HTML never lives next to templates — output belongs in /4_output only
+# Knitted HTML never lives next to templates — output belongs in /4_output only.
+# README/REPLICATION knits are throwaway previews; the .md files are the source.
 /3_templates/*.html
 /3_templates_testing/*.html
 README.html
+REPLICATION.html
 
 # Stress suite (phase 4): generated corrupted data + its throwaway renders +
 # the per-run results log never go to git. The scripts (stress_*.R) DO.

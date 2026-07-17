@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.8_build_index.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     Build 4_output/index.html — a static, browsable gallery of every
 #              rendered report: one thumbnail card per enabled entry in
 #              render_config.yml, plus a featured card for the combined report.

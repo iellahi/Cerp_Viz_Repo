@@ -334,7 +334,7 @@ combined:
     - ridgeline            # 3.13 ridgeline plot
     - calendar_heatmap     # 3.14 calendar heatmap
     - choropleth_demo      # 3.15 choropleth (5-district demo)
-    - choropleth_pk        # 3.15 choropleth (Pakistan ADM2, stylized demo geometry)
+    - choropleth_pk        # 3.15 choropleth (Pakistan ADM2, real geoBoundaries geometry)
     - event_study          # 3.16 event-study plot
     - small_multiples      # 3.17 small multiples
     - heatmap_matrix       # 3.18 heatmap matrix

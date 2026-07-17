@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.7_build_css.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     Generate 2_R/cerp_style.css (the HTML page chrome) FROM the brand
 #              palette in 2_R/theme_colors.yml, so the five brand hexes used by
 #              the page chrome (background, text, code boxes, subtitles, links)

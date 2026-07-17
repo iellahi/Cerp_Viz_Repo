@@ -53,6 +53,32 @@ Package installation sometimes needs build tools.
 - It's safe to re-run `renv::restore()` as many times as needed — it picks up
   where it left off.
 
+**Step 5 fails on one package — `V8` ("failed to download", error code 1).**
+`V8` is needed by the table package (`gt`) and is the one dependency that
+sometimes needs extra help. Try these in order — each is a full fix on its own:
+
+1. *Just retry.* This error is often a flaky download, not a real failure:
+   ```r
+   options(timeout = 600)
+   renv::restore()
+   ```
+2. *Use the pre-built binary* (Mac and Windows) — no compiling at all:
+   ```r
+   options(pkgType = "binary")
+   renv::restore()
+   ```
+3. *Mac:* install the compiler toolchain — one command in the Terminal app,
+   then re-run `renv::restore()`:
+   ```
+   xcode-select --install
+   ```
+4. *Linux, or still failing:* tell V8 to fetch a pre-compiled engine instead of
+   expecting one on your system:
+   ```r
+   Sys.setenv(DOWNLOAD_STATIC_LIBV8 = "1")
+   renv::restore()
+   ```
+
 **"This project requires R 4.4.x" or restore fails immediately.**
 Your R version is too different. Check yours by typing `R.version.string` in the
 Console; install an R 4.4 release (step 1) and reopen the `.Rproj` file.

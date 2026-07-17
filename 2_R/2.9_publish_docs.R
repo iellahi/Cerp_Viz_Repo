@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.9_publish_docs.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     Publish the demo gallery to a committed docs/ folder so GitHub
 #              Pages can serve it (Phase 13). 4_output/ itself stays gitignored
 #              (field-data hard rule) — this script is the ONLY sanctioned path

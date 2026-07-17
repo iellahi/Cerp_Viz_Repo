@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.0_setup_theme.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     Load packages and define the CERP palette, fonts, and ggplot theme
 # Design spec: Design.md — text #1b3a4b | graphs #457b9d, #a8dadc | boxes #e8f4f5
 #              bg #FAF9F6 | body font Charter/Georgia | captions Libre Franklin

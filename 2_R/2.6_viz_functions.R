@@ -1,5 +1,6 @@
 # ==============================================================================
 # Script Name: 2.6_viz_functions.R
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose:     ALL chart logic for the templates, one viz_*() function each. Each
 #              function takes the loaded data plus the template's *_var / option /
 #              text params, does its own data prep, and RETURNS a ggplot object.

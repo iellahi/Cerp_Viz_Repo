@@ -1,5 +1,7 @@
 # CERP Analytics: Automated Visualization Suite
 
+**Author:** Ibraheem Saqib Ellahi ([ibraheemsaqib90@gmail.com](mailto:ibraheemsaqib90@gmail.com)) · MIT License
+
 A modular, parameterized R Markdown reporting engine. It turns raw CSV/Excel data
 into policy-ready **HTML** reports without requiring the user to write any R code.
 You edit one config file (`render_config.yml`); the engine renders every visual and,
@@ -25,8 +27,11 @@ the full report.
   and the pre-flight QA report (`0.00_data_quality_report.Rmd`). Each template is a
   thin wrapper around its `viz_*()` function — you never edit these; you point them
   at data via `render_config.yml`.
-* **/3_templates_testing** — the same template bodies pointed at messy real data,
-  for stress-testing. Rendered by `2.4_test_knit.R`.
+* **/3_templates_testing** — the same template bodies with YAML headers pointed
+  at messy *field* data (e.g. `babychecker.csv`), for manual stress-testing via
+  `2.4_test_knit.R`. Those data files are gitignored, so on a fresh clone these
+  renders fail by design — that's expected, not broken. The maintained,
+  reproducible stress path is the suite in `/5_tests`.
 * **/4_output** — **The Deliverables:** generated HTML reports and figures, plus
   `index.html` — a static gallery rebuilt at the end of every production knit.
   Open it first to browse everything rendered. Gitignored (regenerated locally).
@@ -48,6 +53,9 @@ The short version:
 renv::restore()                                   # once per machine
 source(here::here("2_R", "2.2_master_knit.R"))    # render everything
 ```
+
+Working with an AI assistant (Claude etc.)? **[USING-AI.md](USING-AI.md)** covers
+how to point one at this repo safely and what to ask it for.
 
 `renv` owns the package environment. Templates **never** install packages at
 render time — a missing package fails loudly and tells you to run

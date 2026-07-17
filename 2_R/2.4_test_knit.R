@@ -1,5 +1,6 @@
 # ==============================================================================
-# CERP Analytics: Testing Render Script
+# Script Name: 2.4_test_knit.R — CERP Analytics Testing Render
+# Author:  Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
 # Purpose: Render every .Rmd in 3_templates_testing/ (each with its own YAML
 #          defaults — no render_config.yml) into HTML. This is the stress
 #          sandbox: the same template bodies pointed at messy real data.

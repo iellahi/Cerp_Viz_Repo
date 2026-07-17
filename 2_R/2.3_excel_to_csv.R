@@ -1,5 +1,9 @@
 # ==============================================================================
-# 2.3 Excel to CSV Batch Converter
+# Script Name: 2.3_excel_to_csv.R — Excel to CSV Batch Converter
+# Author:      Ibraheem Saqib Ellahi <ibraheemsaqib90@gmail.com>
+# Purpose:     Convert every .xlsx/.xls dropped into 1_data/ to .csv (first
+#              sheet), so templates only ever read CSV. Run automatically at
+#              the start of the master knit; safe to source standalone.
 # ==============================================================================
 library(readxl)
 library(readr)
